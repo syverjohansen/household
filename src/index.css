@@ -1,0 +1,10 @@
+/* Reset and base styles - App.css handles the main styling */
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
