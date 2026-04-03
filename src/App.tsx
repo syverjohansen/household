@@ -6,15 +6,33 @@ import './App.css';
 
 type TabType = 'maintenance' | 'cleaning';
 
+interface CustomTask {
+  id: string;
+  text: string;
+  note: string;
+  categories: Category[];
+  monthNumber: number;
+  createdAt: number;
+}
+
+const ALL_CATEGORIES: Category[] = ['hvac', 'clean', 'outdoor', 'safety', 'struct', 'admin'];
+
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('maintenance');
   const [checkedTasks, setCheckedTasks] = useLocalStorage<Record<string, boolean>>('homeowner-checklist-tasks', {});
   const [cleaningChecks, setCleaningChecks] = useLocalStorage<Record<string, boolean>>('homeowner-cleaning-tasks', {});
+  const [customTasks, setCustomTasks] = useLocalStorage<CustomTask[]>('homeowner-custom-tasks', []);
   const [openMonths, setOpenMonths] = useState<Set<number>>(() => {
     const currentMonth = new Date().getMonth() + 1;
     return new Set([currentMonth]);
   });
   const [activeCleanMonth, setActiveCleanMonth] = useState(() => new Date().getMonth() + 1);
+
+  // Add task form state
+  const [showAddForm, setShowAddForm] = useState<number | null>(null);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [newTaskNote, setNewTaskNote] = useState('');
+  const [newTaskCategories, setNewTaskCategories] = useState<Category[]>([]);
 
   // Toggle task checked state
   const toggleTask = (taskId: string) => {
@@ -45,7 +63,52 @@ function App() {
     });
   };
 
-  // Calculate total tasks and completed
+  // Add custom task
+  const addCustomTask = (monthNumber: number) => {
+    if (!newTaskText.trim()) return;
+
+    const newTask: CustomTask = {
+      id: `custom-${Date.now()}`,
+      text: newTaskText.trim(),
+      note: newTaskNote.trim(),
+      categories: newTaskCategories.length > 0 ? newTaskCategories : ['admin'],
+      monthNumber,
+      createdAt: Date.now()
+    };
+
+    setCustomTasks(prev => [...prev, newTask]);
+    setNewTaskText('');
+    setNewTaskNote('');
+    setNewTaskCategories([]);
+    setShowAddForm(null);
+  };
+
+  // Delete custom task
+  const deleteCustomTask = (taskId: string) => {
+    setCustomTasks(prev => prev.filter(t => t.id !== taskId));
+    // Also remove from checked tasks
+    setCheckedTasks(prev => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  };
+
+  // Toggle category selection
+  const toggleCategory = (category: Category) => {
+    setNewTaskCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  // Get custom tasks for a month
+  const getCustomTasksForMonth = (monthNumber: number) => {
+    return customTasks.filter(t => t.monthNumber === monthNumber);
+  };
+
+  // Calculate total tasks and completed (including custom tasks)
   const { totalTasks, progressPercent } = useMemo(() => {
     let total = 0;
     let completed = 0;
@@ -59,11 +122,17 @@ function App() {
       });
     });
 
+    // Include custom tasks
+    customTasks.forEach(task => {
+      total++;
+      if (checkedTasks[task.id]) completed++;
+    });
+
     return {
       totalTasks: total,
       progressPercent: total > 0 ? Math.round((completed / total) * 100) : 0
     };
-  }, [checkedTasks]);
+  }, [checkedTasks, customTasks]);
 
   // Calculate cleaning progress for active month
   const cleaningProgress = useMemo(() => {
@@ -142,6 +211,7 @@ function App() {
 
   const renderMonthCard = (month: Month) => {
     const isOpen = openMonths.has(month.number);
+    const monthCustomTasks = getCustomTasksForMonth(month.number);
 
     // Count completed tasks in this month
     let monthTotal = 0;
@@ -151,6 +221,11 @@ function App() {
         monthTotal++;
         if (checkedTasks[task.id]) monthCompleted++;
       });
+    });
+    // Include custom tasks in count
+    monthCustomTasks.forEach(task => {
+      monthTotal++;
+      if (checkedTasks[task.id]) monthCompleted++;
     });
 
     return (
@@ -201,6 +276,111 @@ function App() {
               })}
             </div>
           ))}
+
+          {/* Custom Tasks Section */}
+          {monthCustomTasks.length > 0 && (
+            <div className="task-group">
+              <div className="task-group-label">Custom Tasks</div>
+              {monthCustomTasks.map((task) => {
+                const isChecked = checkedTasks[task.id] || false;
+                return (
+                  <div key={task.id} className="task-item">
+                    <div
+                      className={`task-check ${isChecked ? 'checked' : ''}`}
+                      onClick={() => toggleTask(task.id)}
+                    >
+                      {isChecked ? '✓' : ''}
+                    </div>
+                    <div className="task-text">
+                      <div className={`task-main ${isChecked ? 'checked-text' : ''}`}>
+                        {task.text}
+                      </div>
+                      {task.note && <div className="task-note">{task.note}</div>}
+                      <div className="task-pills">
+                        {task.categories.map(cat => renderPill(cat))}
+                        <button
+                          className="delete-task-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCustomTask(task.id);
+                          }}
+                        >
+                          ✕ Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add Task Form */}
+          {showAddForm === month.number ? (
+            <div className="add-task-form">
+              <div className="add-task-form-header">Add Custom Task</div>
+              <input
+                type="text"
+                placeholder="Task description..."
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                className="add-task-input"
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="Note (optional)..."
+                value={newTaskNote}
+                onChange={(e) => setNewTaskNote(e.target.value)}
+                className="add-task-input"
+              />
+              <div className="category-selector">
+                <span className="category-selector-label">Categories:</span>
+                <div className="category-options">
+                  {ALL_CATEGORIES.map(cat => {
+                    const config = CATEGORY_CONFIG[cat];
+                    const isSelected = newTaskCategories.includes(cat);
+                    return (
+                      <button
+                        key={cat}
+                        className={`category-option ${cat} ${isSelected ? 'selected' : ''}`}
+                        onClick={() => toggleCategory(cat)}
+                      >
+                        {config.emoji} {config.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="add-task-actions">
+                <button
+                  className="add-task-cancel"
+                  onClick={() => {
+                    setShowAddForm(null);
+                    setNewTaskText('');
+                    setNewTaskNote('');
+                    setNewTaskCategories([]);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="add-task-submit"
+                  onClick={() => addCustomTask(month.number)}
+                  disabled={!newTaskText.trim()}
+                >
+                  Add Task
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="add-task-btn"
+              onClick={() => setShowAddForm(month.number)}
+            >
+              + Add Custom Task
+            </button>
+          )}
         </div>
       </div>
     );
