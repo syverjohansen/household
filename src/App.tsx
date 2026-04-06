@@ -15,6 +15,12 @@ interface CustomTask {
   createdAt: number;
 }
 
+interface CustomWeeklyTask {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
 const ALL_CATEGORIES: Category[] = ['hvac', 'clean', 'outdoor', 'safety', 'struct', 'admin'];
 
 function App() {
@@ -28,11 +34,18 @@ function App() {
   });
   const [activeCleanMonth, setActiveCleanMonth] = useState(() => new Date().getMonth() + 1);
 
-  // Add task form state
+  // Custom weekly cleaning tasks
+  const [customWeeklyTasks, setCustomWeeklyTasks] = useLocalStorage<CustomWeeklyTask[]>('homeowner-custom-weekly-tasks', []);
+
+  // Add task form state (for maintenance)
   const [showAddForm, setShowAddForm] = useState<number | null>(null);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskNote, setNewTaskNote] = useState('');
   const [newTaskCategories, setNewTaskCategories] = useState<Category[]>([]);
+
+  // Add weekly task form state
+  const [showAddWeeklyForm, setShowAddWeeklyForm] = useState(false);
+  const [newWeeklyTaskText, setNewWeeklyTaskText] = useState('');
 
   // Toggle task checked state
   const toggleTask = (taskId: string) => {
@@ -108,6 +121,36 @@ function App() {
     return customTasks.filter(t => t.monthNumber === monthNumber);
   };
 
+  // Add custom weekly task
+  const addCustomWeeklyTask = () => {
+    if (!newWeeklyTaskText.trim()) return;
+
+    const newTask: CustomWeeklyTask = {
+      id: `custom-weekly-${Date.now()}`,
+      text: newWeeklyTaskText.trim(),
+      createdAt: Date.now()
+    };
+
+    setCustomWeeklyTasks(prev => [...prev, newTask]);
+    setNewWeeklyTaskText('');
+    setShowAddWeeklyForm(false);
+  };
+
+  // Delete custom weekly task
+  const deleteCustomWeeklyTask = (taskId: string) => {
+    setCustomWeeklyTasks(prev => prev.filter(t => t.id !== taskId));
+    // Also remove all checks for this task across all months and weeks
+    setCleaningChecks(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(key => {
+        if (key.includes(taskId)) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  };
+
   // Calculate total tasks and completed (including custom tasks)
   const { totalTasks, progressPercent } = useMemo(() => {
     let total = 0;
@@ -137,13 +180,18 @@ function App() {
   // Calculate cleaning progress for active month
   const cleaningProgress = useMemo(() => {
     const m = activeCleanMonth;
-    let total = WEEKLY_TASKS.length * 4; // 4 weeks
+    const allWeeklyTasks = WEEKLY_TASKS.length + customWeeklyTasks.length;
+    let total = allWeeklyTasks * 4; // 4 weeks
     let done = 0;
 
-    // Weekly tasks
+    // Weekly tasks (built-in)
     for (let w = 1; w <= 4; w++) {
       WEEKLY_TASKS.forEach((_, ti) => {
         if (cleaningChecks[`${m}_w${w}_${ti}`]) done++;
+      });
+      // Custom weekly tasks
+      customWeeklyTasks.forEach((task) => {
+        if (cleaningChecks[`${m}_w${w}_${task.id}`]) done++;
       });
     }
 
@@ -160,7 +208,7 @@ function App() {
       done,
       percent: total > 0 ? Math.round((done / total) * 100) : 0
     };
-  }, [activeCleanMonth, cleaningChecks]);
+  }, [activeCleanMonth, cleaningChecks, customWeeklyTasks]);
 
   // Render a category pill
   const renderPill = (category: Category) => {
@@ -434,15 +482,20 @@ function App() {
         <div className="clean-section-sub">Track each of the 4 weeks this month. Check off as you go.</div>
         <div className="week-grid">
           {[1, 2, 3, 4].map(week => {
-            const weekDone = WEEKLY_TASKS.filter((_, ti) =>
+            const builtInDone = WEEKLY_TASKS.filter((_, ti) =>
               cleaningChecks[`${activeCleanMonth}_w${week}_${ti}`]
             ).length;
+            const customDone = customWeeklyTasks.filter(task =>
+              cleaningChecks[`${activeCleanMonth}_w${week}_${task.id}`]
+            ).length;
+            const weekDone = builtInDone + customDone;
+            const weekTotal = WEEKLY_TASKS.length + customWeeklyTasks.length;
 
             return (
               <div key={week} className="week-col">
                 <div className="week-col-head">
                   Week {week}
-                  <span className="week-done-badge">{weekDone}/{WEEKLY_TASKS.length}</span>
+                  <span className="week-done-badge">{weekDone}/{weekTotal}</span>
                 </div>
                 <div className="week-col-body">
                   {WEEKLY_TASKS.map((task, ti) => {
@@ -460,11 +513,85 @@ function App() {
                       </div>
                     );
                   })}
+                  {/* Custom weekly tasks */}
+                  {customWeeklyTasks.map((task) => {
+                    const key = `${activeCleanMonth}_w${week}_${task.id}`;
+                    const isChecked = cleaningChecks[key] || false;
+                    return (
+                      <div key={task.id} className="ct-item ct-item-custom">
+                        <div
+                          className={`ct-check ${isChecked ? 'checked' : ''}`}
+                          onClick={() => toggleCleaningTask(key)}
+                        >
+                          {isChecked ? '✓' : ''}
+                        </div>
+                        <div className={`ct-label ${isChecked ? 'done' : ''}`}>{task.text}</div>
+                        {week === 1 && (
+                          <button
+                            className="ct-delete-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteCustomWeeklyTask(task.id);
+                            }}
+                            title="Remove task"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
           })}
         </div>
+
+        {/* Add Weekly Task */}
+        {showAddWeeklyForm ? (
+          <div className="add-weekly-form">
+            <input
+              type="text"
+              placeholder="New weekly task..."
+              value={newWeeklyTaskText}
+              onChange={(e) => setNewWeeklyTaskText(e.target.value)}
+              className="add-task-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addCustomWeeklyTask();
+                if (e.key === 'Escape') {
+                  setShowAddWeeklyForm(false);
+                  setNewWeeklyTaskText('');
+                }
+              }}
+            />
+            <div className="add-task-actions">
+              <button
+                className="add-task-cancel"
+                onClick={() => {
+                  setShowAddWeeklyForm(false);
+                  setNewWeeklyTaskText('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="add-task-submit"
+                onClick={addCustomWeeklyTask}
+                disabled={!newWeeklyTaskText.trim()}
+              >
+                Add Task
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="add-weekly-btn"
+            onClick={() => setShowAddWeeklyForm(true)}
+          >
+            + Add Custom Weekly Task
+          </button>
+        )}
 
         {/* Monthly tasks */}
         <div className="monthly-clean-card">

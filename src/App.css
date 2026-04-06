@@ -774,3 +774,60 @@ body {
   .category-options { gap: 4px; }
   .category-option { font-size: 10px; padding: 4px 8px; }
 }
+
+/* ---- ADD CUSTOM WEEKLY TASK ---- */
+.add-weekly-btn {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sage);
+  background: var(--light-sage);
+  border: 1.5px dashed var(--sage);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.add-weekly-btn:hover {
+  background: #D8ECD9;
+  border-style: solid;
+}
+
+.add-weekly-form {
+  margin-top: 16px;
+  padding: 16px;
+  background: #FAFAF8;
+  border-radius: 12px;
+  border: 1px solid #E0D8CF;
+}
+
+.ct-item-custom {
+  background: rgba(90, 122, 94, 0.05);
+}
+
+.ct-delete-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #E0D8CF;
+  border-radius: 50%;
+  background: white;
+  color: #B84C2A;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.ct-delete-btn:hover {
+  background: #FDE8E0;
+  border-color: #B84C2A;
+}
