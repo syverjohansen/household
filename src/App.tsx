@@ -21,7 +21,19 @@ interface CustomWeeklyTask {
   createdAt: number;
 }
 
+interface CustomMonthlyCleanTask {
+  id: string;
+  text: string;
+  zone: 'kitchen' | 'bathrooms' | 'whole-home';
+  createdAt: number;
+}
+
 const ALL_CATEGORIES: Category[] = ['hvac', 'clean', 'outdoor', 'safety', 'struct', 'admin'];
+const ZONE_OPTIONS = [
+  { value: 'kitchen' as const, label: 'Kitchen', emoji: '🍳' },
+  { value: 'bathrooms' as const, label: 'Bathrooms', emoji: '🛁' },
+  { value: 'whole-home' as const, label: 'Whole Home', emoji: '🏠' },
+];
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('maintenance');
@@ -46,6 +58,14 @@ function App() {
   // Add weekly task form state
   const [showAddWeeklyForm, setShowAddWeeklyForm] = useState(false);
   const [newWeeklyTaskText, setNewWeeklyTaskText] = useState('');
+
+  // Custom monthly cleaning tasks
+  const [customMonthlyCleanTasks, setCustomMonthlyCleanTasks] = useLocalStorage<CustomMonthlyCleanTask[]>('homeowner-custom-monthly-clean-tasks', []);
+
+  // Add monthly cleaning task form state
+  const [showAddMonthlyCleanForm, setShowAddMonthlyCleanForm] = useState(false);
+  const [newMonthlyCleanTaskText, setNewMonthlyCleanTaskText] = useState('');
+  const [newMonthlyCleanTaskZone, setNewMonthlyCleanTaskZone] = useState<'kitchen' | 'bathrooms' | 'whole-home'>('whole-home');
 
   // Toggle task checked state
   const toggleTask = (taskId: string) => {
@@ -151,6 +171,43 @@ function App() {
     });
   };
 
+  // Add custom monthly cleaning task
+  const addCustomMonthlyCleanTask = () => {
+    if (!newMonthlyCleanTaskText.trim()) return;
+
+    const newTask: CustomMonthlyCleanTask = {
+      id: `custom-monthly-clean-${Date.now()}`,
+      text: newMonthlyCleanTaskText.trim(),
+      zone: newMonthlyCleanTaskZone,
+      createdAt: Date.now()
+    };
+
+    setCustomMonthlyCleanTasks(prev => [...prev, newTask]);
+    setNewMonthlyCleanTaskText('');
+    setNewMonthlyCleanTaskZone('whole-home');
+    setShowAddMonthlyCleanForm(false);
+  };
+
+  // Delete custom monthly cleaning task
+  const deleteCustomMonthlyCleanTask = (taskId: string) => {
+    setCustomMonthlyCleanTasks(prev => prev.filter(t => t.id !== taskId));
+    // Also remove all checks for this task across all months
+    setCleaningChecks(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(key => {
+        if (key.includes(taskId)) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  };
+
+  // Get custom monthly cleaning tasks by zone
+  const getCustomMonthlyCleanTasksByZone = (zone: string) => {
+    return customMonthlyCleanTasks.filter(t => t.zone === zone);
+  };
+
   // Calculate total tasks and completed (including custom tasks)
   const { totalTasks, progressPercent } = useMemo(() => {
     let total = 0;
@@ -195,7 +252,7 @@ function App() {
       });
     }
 
-    // Monthly tasks
+    // Monthly tasks (built-in)
     MONTHLY_ZONES.forEach((zone, zi) => {
       zone.tasks.forEach((_, ti) => {
         total++;
@@ -203,12 +260,18 @@ function App() {
       });
     });
 
+    // Custom monthly cleaning tasks
+    customMonthlyCleanTasks.forEach((task) => {
+      total++;
+      if (cleaningChecks[`${m}_monthly_${task.id}`]) done++;
+    });
+
     return {
       total,
       done,
       percent: total > 0 ? Math.round((done / total) * 100) : 0
     };
-  }, [activeCleanMonth, cleaningChecks, customWeeklyTasks]);
+  }, [activeCleanMonth, cleaningChecks, customWeeklyTasks, customMonthlyCleanTasks]);
 
   // Render a category pill
   const renderPill = (category: Category) => {
@@ -605,32 +668,126 @@ function App() {
                 acc + zone.tasks.filter((_, ti) =>
                   cleaningChecks[`${activeCleanMonth}_monthly_mz${zi}_${ti}`]
                 ).length, 0
-              )} / {MONTHLY_ZONES.reduce((acc, zone) => acc + zone.tasks.length, 0)}
+              ) + customMonthlyCleanTasks.filter(task =>
+                cleaningChecks[`${activeCleanMonth}_monthly_${task.id}`]
+              ).length} / {MONTHLY_ZONES.reduce((acc, zone) => acc + zone.tasks.length, 0) + customMonthlyCleanTasks.length}
             </span>
           </div>
           <div className="monthly-grid">
-            {MONTHLY_ZONES.map((zone, zi) => (
-              <div key={zi} className="monthly-zone">
-                <div className="monthly-zone-label">{zone.emoji} {zone.label}</div>
-                {zone.tasks.map((task, ti) => {
-                  const key = `${activeCleanMonth}_monthly_mz${zi}_${ti}`;
-                  const isChecked = cleaningChecks[key] || false;
-                  return (
-                    <div key={ti} className="ct-item">
-                      <div
-                        className={`ct-check ${isChecked ? 'checked' : ''}`}
-                        onClick={() => toggleCleaningTask(key)}
-                      >
-                        {isChecked ? '✓' : ''}
+            {MONTHLY_ZONES.map((zone, zi) => {
+              const zoneKey = zone.label.toLowerCase().replace(' ', '-') as 'kitchen' | 'bathrooms' | 'whole-home';
+              const customTasksForZone = getCustomMonthlyCleanTasksByZone(zoneKey);
+
+              return (
+                <div key={zi} className="monthly-zone">
+                  <div className="monthly-zone-label">{zone.emoji} {zone.label}</div>
+                  {zone.tasks.map((task, ti) => {
+                    const key = `${activeCleanMonth}_monthly_mz${zi}_${ti}`;
+                    const isChecked = cleaningChecks[key] || false;
+                    return (
+                      <div key={ti} className="ct-item">
+                        <div
+                          className={`ct-check ${isChecked ? 'checked' : ''}`}
+                          onClick={() => toggleCleaningTask(key)}
+                        >
+                          {isChecked ? '✓' : ''}
+                        </div>
+                        <div className={`ct-label ${isChecked ? 'done' : ''}`}>{task}</div>
                       </div>
-                      <div className={`ct-label ${isChecked ? 'done' : ''}`}>{task}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    );
+                  })}
+                  {/* Custom tasks for this zone */}
+                  {customTasksForZone.map((task) => {
+                    const key = `${activeCleanMonth}_monthly_${task.id}`;
+                    const isChecked = cleaningChecks[key] || false;
+                    return (
+                      <div key={task.id} className="ct-item ct-item-custom">
+                        <div
+                          className={`ct-check ${isChecked ? 'checked' : ''}`}
+                          onClick={() => toggleCleaningTask(key)}
+                        >
+                          {isChecked ? '✓' : ''}
+                        </div>
+                        <div className={`ct-label ${isChecked ? 'done' : ''}`}>{task.text}</div>
+                        <button
+                          className="ct-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCustomMonthlyCleanTask(task.id);
+                          }}
+                          title="Remove task"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
+
+        {/* Add Monthly Cleaning Task */}
+        {showAddMonthlyCleanForm ? (
+          <div className="add-monthly-clean-form">
+            <input
+              type="text"
+              placeholder="New monthly cleaning task..."
+              value={newMonthlyCleanTaskText}
+              onChange={(e) => setNewMonthlyCleanTaskText(e.target.value)}
+              className="add-task-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addCustomMonthlyCleanTask();
+                if (e.key === 'Escape') {
+                  setShowAddMonthlyCleanForm(false);
+                  setNewMonthlyCleanTaskText('');
+                }
+              }}
+            />
+            <div className="zone-selector">
+              <span className="zone-selector-label">Zone:</span>
+              <div className="zone-options">
+                {ZONE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    className={`zone-option ${newMonthlyCleanTaskZone === opt.value ? 'selected' : ''}`}
+                    onClick={() => setNewMonthlyCleanTaskZone(opt.value)}
+                  >
+                    {opt.emoji} {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="add-task-actions">
+              <button
+                className="add-task-cancel"
+                onClick={() => {
+                  setShowAddMonthlyCleanForm(false);
+                  setNewMonthlyCleanTaskText('');
+                  setNewMonthlyCleanTaskZone('whole-home');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="add-task-submit"
+                onClick={addCustomMonthlyCleanTask}
+                disabled={!newMonthlyCleanTaskText.trim()}
+              >
+                Add Task
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="add-monthly-clean-btn"
+            onClick={() => setShowAddMonthlyCleanForm(true)}
+          >
+            + Add Custom Monthly Task
+          </button>
+        )}
       </div>
     );
   };

@@ -831,3 +831,69 @@ body {
   background: #FDE8E0;
   border-color: #B84C2A;
 }
+
+/* ---- ADD CUSTOM MONTHLY CLEANING TASK ---- */
+.add-monthly-clean-btn {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sage);
+  background: var(--light-sage);
+  border: 1.5px dashed var(--sage);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.add-monthly-clean-btn:hover {
+  background: #D8ECD9;
+  border-style: solid;
+}
+
+.add-monthly-clean-form {
+  margin-top: 20px;
+  padding: 16px;
+  background: #FAFAF8;
+  border-radius: 12px;
+  border: 1px solid #E0D8CF;
+}
+
+.zone-selector {
+  margin-bottom: 16px;
+}
+.zone-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate);
+  display: block;
+  margin-bottom: 8px;
+}
+.zone-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.zone-option {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1.5px solid #D8D0C6;
+  background: white;
+  color: var(--slate);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.zone-option:hover {
+  border-color: var(--sage);
+  color: var(--sage);
+}
+.zone-option.selected {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: white;
+}
